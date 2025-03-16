@@ -1,23 +1,23 @@
 //  First way of loading env variables
-// require('dotenv').config({path: './env'})  -> not pref dont use this
+// require('dotenv').config({path: './env'})  -> not preferable dont use this
 
 
-// SECOND WAY OF DATABASE CONNECTION -> 
+// SECOND WAY OF DATABASE CONNECTION -> preferable ->way: write connection logic in a seperate fn in a file in db folder and then import than fn here in main index.js file
+
 import connectDB from './db/index.js'
 
-// second way of loading env variables ->preferable ->write connection logic in a seperate fn in a file in db folder and then import than fn here in main index.js file
-
+// second way of loading env variables -> preferable
 import dotenv from "dotenv"
 dotenv.config({
     path: './env'
 })
-// make sure to add experimental flags in "scripts" in package.json upon using this method
+// make sure to add experimental flags in "scripts" in package.json upon using this second method of loading dotenv
 connectDB()
 
 
 
 
-// FIRST WAY OF DATABASE CONNECTION ->write all connection logic in index.js file itself
+// FIRST WAY OF DATABASE CONNECTION ->works perfectly fine but not very preferable as it doesnt look like clean code -> way: write all connection logic in index.js file itself
 
 // import mongoose from 'mongoose'
 // import { DB_NAME } from "./constants.js";
