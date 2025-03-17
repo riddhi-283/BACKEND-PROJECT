@@ -13,6 +13,15 @@ dotenv.config({
 })
 // make sure to add experimental flags in "scripts" in package.json upon using this second method of loading dotenv
 connectDB()
+.then(() =>{
+    app.listen(process.env.PORT || 8000,  ()=>{
+        console.log(`Server is running at port : ${process.env.PORT}`);
+    })
+    // when connection of mongodb is successful, start the server using app.listen
+})
+.catch((err) => {
+    console.log("MONGO DB connection failed!!! ", err); 
+})
 
 
 
