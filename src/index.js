@@ -8,6 +8,7 @@ import connectDB from './db/index.js'
 
 // second way of loading env variables -> preferable
 import dotenv from "dotenv"
+import {app} from './app.js'
 dotenv.config({
     path: './env'
 })
