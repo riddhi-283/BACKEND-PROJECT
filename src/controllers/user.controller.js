@@ -22,7 +22,7 @@ const registerUser = asyncHandler(async(req, res) => {
    // if(fullname === "") throw new apiError(400, "FullName is required!")
    
    // another better way 
-   // check-1 // if empty
+   // check-1 // if any data feilds are empty
    if(
     [fullname, email, username, password].some((field) => 
      field?.trim() === "")   // agar field hai to trim it, or trim ke baad if is empty then return true, and even if one field is empty then it returns true
@@ -31,16 +31,27 @@ const registerUser = asyncHandler(async(req, res) => {
    }
    
    // check-2// if already exists
-   const existedUser = User.findOne({
+   const existedUser = await User.findOne({
     $or: [{username},{email}]
    })
    if(existedUser) throw new apiError(409,"User with this email or username already exists!")
+
+    // console.log(req.files);   // only to learn
    
-    // check-3// check if avatar uploaded or not
+   
+    // check-3// find localpath of avatar & check if its uploaded or not 
     const avatarLocalPath = req.files?.avatar[0]?.path
-    const coverImageLocalPath = req.files?.coverImage[0]?.path
+    // const coverImageLocalPath = req.files?.coverImage[0]?.path    
+    // 1 -- withouting checking any condition on coverImage
 
     if(!avatarLocalPath) throw new apiError(400,"Avatar file is required!")
+    
+    // 2---checking condition for cover image: if coverimage is not uploaded then it shows "undefined" for coverImage field, and throws an error so to handle this:
+    let coverImageLocalPath;
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
+        coverImageLocalPath = req.files.coverImage[0].path
+    } 
+    //now because of this, even when no coverimage is there there is no error
 
     // upload them to cloudinary - await because the code below shouldn't run before upload is completetd and also becuase upload takes time that is why we used async in uploadOnCloudinary
     const avatar = await uploadOnCloudinary(avatarLocalPath)
@@ -49,7 +60,7 @@ const registerUser = asyncHandler(async(req, res) => {
     // checking if avatar has gone to cloudinary or not
     if(!avatar) throw new apiError(400,"Avatar file is required!")
 
-    // make an object and make an entry in db - ek hi cheez hai jo database se baat kr rhi h which is User
+    // make an object and make an entry in db - ek hi cheez hai jo database se baat kr rhi h which is User, that is why User.create is used
     const user = await User.create({
         fullname,
         avatar: avatar.url,
