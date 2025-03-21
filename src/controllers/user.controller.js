@@ -4,6 +4,23 @@ import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { apiResponse } from "../utils/apiResponse.js"
 
+const generateAccessandRefreshTokens = async(userId) => {
+    try {
+        const user = User.findById(userId)
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+        
+        // NOTE: accessToken is given to user and refreshToken is saved in database
+        user.refreshToken = refreshToken
+        await user.save({validateBeforeSave: false})   // when.save is called mongoose model kick in like password field gets kick in (saying password must be there), validateBeforeSave = false is used for that (means no need to validate anything directly save)
+
+        return {accessToken, refreshToken}
+
+    } catch (error) {
+        throw new apiError(500,"Something went wrong while generating access and refresh tokens!!")
+    }
+}
+
 const registerUser = asyncHandler(async(req, res) => {
     // steps -1) get user details from frontend  - no need to make frontend for this, data can be taken from postman
     // 2) validations (user details not empty)
@@ -85,6 +102,94 @@ return res.status(201).json(
   
 })
 
+const loginUser = asyncHandler(async( req,res) => {
+    //1 get data from req.body
+    //2 ask for username or email for login
+    //3 find the user
+    //4 password check
+    //5 access and refresh token generation
+    //6 send these tokens in form of secure cookies
+    //7 response given to user if he has succesfully logged in or not
+
+    const {email, username, password} = req.body
+    
+    // if(!username) throw new apiError(400,"Username required for login!!")  - search can be done only using username also, similarly for email
+    // check if username or email (any one) is provided 
+    if(!username || !email) throw new apiError(400,"Username or email required for login!!")
+
+    // User.findOne({email}) or User.findOne({username})  -- if you want to find by any one of them simply do this
+    // either search for email or username
+    const user = await User.findOne({
+        $or:[{username, email}]
+    })
+    // user not registered 
+    if(!user) throw new apiError(404, "User does not exist!!")
+    
+    // if user is there, check password - we will make use of the password checking method - isPasswordCorrect(from users.models.js), but since these are our own made methods so we will use user instance and not User (for mongodb methods like findOne etc we can use User)
+    const isPasswordValid = await user.isPasswordCorrect(password)
+
+    if(!isPasswordValid) throw new apiError(401, "Invalid password")
+
+    // generate access token n refresh token
+    const {accessToken, refreshToken} = await generateAccessandRefreshTokens(user._id)
+    
+    // send tokens into cookies
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")  // Question: why we have to again retrieve user??
+    // Answer: the user we retrived earlier using findOne fn had all data (even password) but refreshtoken value was empty becase generataccessandrefreshtoken fn is called after that, so the retrived user instance has no value for refreshtoken but knows password which is wrong , so we have two options:
+    // ---opt 1) update the refreshtoken value for that user object
+    // ---opt 2) make another db query(if its not expensive) and retrive user again, becayse till now refreshtoken value has already been updated in db, so this time the retrieved user object will have value for refreshtoken field.
+
+    const options = {
+        httpOnly: true,  // setting httopnly and secure as true ensures that cookies are only modifiable from server not from frontend
+        secure: true
+    }
+    return res.status(200)
+    .cookie("acessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+        new apiResponse(
+            200,
+            {
+                user: loggedInUser, refreshToken, accessToken
+            },
+            " User logged in successfully!"
+        )
+    )
+
+})
+
+// logout functionality
+// Ques: why does logout requires middleware?
+// We dont have access to _id or any field of usser for this fn (if we want access we again have to run findOne method, also we cant durectly ask user to enter an email for which logout has to happen as he may enter any email and someone else logsout because of that) ->solution: use a middleware
+const logoutUser = asyncHandler(async(req,res) => {
+    // clear cookies
+    // delete refreshToken
+
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set :{
+                refreshToken:undefined
+            }
+        },
+        {
+            new: true
+        }
+    )
+
+    const options = {
+        httpOnly: true,  // setting httopnly and secure as true ensures that cookies are only modifiable from server not from frontend
+        secure: true
+    }
+    return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new apiResponse(200, {}, "User logged out!!"))
+})
+
 export {
     registerUser,
+    loginUser,
+    logoutUser
 }
