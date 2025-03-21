@@ -3,10 +3,11 @@ import {apiError} from "../utils/apiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { apiResponse } from "../utils/apiResponse.js"
+import jwt from "jsonwebtoken"
 
 const generateAccessandRefreshTokens = async(userId) => {
     try {
-        const user = User.findById(userId)
+        const user = await User.findById(userId)
         const accessToken = user.generateAccessToken()
         const refreshToken = user.generateRefreshToken()
         
@@ -112,12 +113,12 @@ const loginUser = asyncHandler(async( req,res) => {
     //7 response given to user if he has succesfully logged in or not
 
     const {email, username, password} = req.body
-    
-    // if(!username) throw new apiError(400,"Username required for login!!")  - search can be done only using username also, similarly for email
-    // check if username or email (any one) is provided 
-    if(!username || !email) throw new apiError(400,"Username or email required for login!!")
+    console.log(email)
 
-    // User.findOne({email}) or User.findOne({username})  -- if you want to find by any one of them simply do this
+    // check if username and email both are provided 
+    if(!username && !email) throw new apiError(400,"Username or email required for login!!")
+
+    // if(!(username || email))  -- if you want to find by any one of them and not both then simply do this
     // either search for email or username
     const user = await User.findOne({
         $or:[{username, email}]
@@ -144,7 +145,7 @@ const loginUser = asyncHandler(async( req,res) => {
         secure: true
     }
     return res.status(200)
-    .cookie("acessToken", accessToken, options)
+    .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
     .json(
         new apiResponse(
@@ -169,7 +170,7 @@ const logoutUser = asyncHandler(async(req,res) => {
         req.user._id,
         {
             $set :{
-                refreshToken:undefined
+                refreshToken:1
             }
         },
         {
@@ -188,8 +189,60 @@ const logoutUser = asyncHandler(async(req,res) => {
     .json(new apiResponse(200, {}, "User logged out!!"))
 })
 
+const refreshAccessToken = asyncHandler(async(req,res) => {
+   const incomingRefreshToken = req.cookies.refreshToken 
+   || req.body.refreshToken
+
+   if(!incomingRefreshToken){
+    throw new apiError(401, "Unauthorized request!!")
+   }
+
+   // verify incomingRefreshToken
+   try {
+    const decodedToken = jwt.verify(
+     incomingRefreshToken,
+     process.env.REFRESH_TOKEN_SECRET,
+    )
+ 
+    const user = await User.findById(decodedToken?._id)
+    if(!user) throw new apiError(401,"Invalid refresh token!!")
+ 
+    // match if incoming token which is sent by user is matching with original token user had
+    if(incomingRefreshToken !== user?.refreshToken){
+     throw new apiError(401, "Refresh token is expired or used")
+    }
+ 
+    const options = {
+     httpOnly:true,
+     secure:true
+    }
+ 
+    const {accessToken, newrefreshToken} = await generateAccessandRefreshTokens(user._id)
+    
+    return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", newrefreshToken, options)
+    .json(
+     new apiResponse(
+         200,
+         {accessToken, refreshToken:newrefreshToken},
+         "Access token refreshed!"
+     )
+    )
+   
+   } catch (error) {
+     throw new apiError(401, error?.message || 
+        "Invalid refresh token"
+     )
+   }
+
+
+   
+})
 export {
     registerUser,
     loginUser,
-    logoutUser
+    logoutUser,
+    refreshAccessToken
 }
