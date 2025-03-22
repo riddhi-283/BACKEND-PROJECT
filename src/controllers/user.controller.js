@@ -240,9 +240,117 @@ const refreshAccessToken = asyncHandler(async(req,res) => {
 
    
 })
+
+const changeCurrentPassword = asyncHandler(async(req,res) => {
+    // what do we want to take from user:
+    const {oldPassword, newPassword} = req.body
+
+    // to change the password of a user, we first need to have access of user. if a user is able to change his password then it means he is logged in clearly, that means middleware chala hai so req.user se user to hai apne paas
+    const user = await User.findById(req.user?._id)
+
+    // first check if old password is corrct or not
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+    if(!isPasswordCorrect) throw new apiError(401, "Incorrect old password!!")
+
+    // set new password
+    user.password = newPassword   // ->this goes to userSchema.pre("save",..) method, if newpassword is same as prevously stored (old) password, then simply go to next, but if not then this new password will get bcrypted
+    await user.save({validateBeforeSave: false})
+
+    return res
+    .status(200)
+    .json(new apiResponse(200, {}, "Password changed successfully!"))
+
+})
+
+const getCurrentUser =  asyncHandler(async(req,res) => {
+    return res
+    .status(200)
+    .json(200, req.user, "Current user fetched successfully!")
+})
+
+// we can make functions for updating other details as well
+const updateAccountDetails = asyncHandler(async(req,res) => {
+    const {fullname, email} = req.body
+
+    if(!fullname || !email){
+        throw new apiError(400, "All fields are required!")
+    }
+    // find user first 
+    const user = User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                fullname,
+                email:email,
+
+            }
+        },
+        {new:true} // new=true means after updation new user (user with updated info) will be returned to us
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new apiResponse(200, user, "Account details updated sucessfully!"))
+})
+
+// updating files  - 2 middlewares have to be used (multer, because files will be accepted using that only, second only those can access who are logged in)
+
+const updateUserAvatar = asyncHandler(async(req,res) => {
+   const avatarLocalPath = req.file?.path
+   if(!avatarLocalPath) throw new apiError(400,"Avatar file is missing!!")
+   
+   // upload avatar local path on cloudnary
+   const avatar = await uploadOnCloudinary(avatarLocalPath)
+   if(!avatar.url) throw new apiError(400,"Error while uploading avatar!!")
+
+   // update avatar
+   const user  = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+        $set:{
+            avatar : avatar.url
+        }
+    },
+    {new: true}
+   ).select("-password")
+
+   return res
+   .status(200)
+   .json(new apiResponse(200, user, "Avatar updated successfully!!"))
+})
+
+const updateUserCoverImage = asyncHandler(async(req,res) => {
+    const coverImageLocalPath = req.file?.path
+    if(!coverImageLocalPath) throw new apiError(400,"CoverImage file is missing!!")
+    
+    // upload avatar local path on cloudnary
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+    if(!coverImage.url) throw new apiError(400,"Error while uploading coverImage!!")
+ 
+    // update avatar
+    const user = await User.findByIdAndUpdate(
+     req.user?._id,
+     {
+         $set:{
+            coverImage : coverImage.url
+         }
+     },
+     {new: true}
+    ).select("-password")
+
+    return res
+   .status(200)
+   .json(new apiResponse(200, user, "CoverImage updated successfully!!"))
+ })
+
 export {
     registerUser,
     loginUser,
     logoutUser,
-    refreshAccessToken
+    refreshAccessToken, 
+    changeCurrentPassword,
+    getCurrentUser, 
+    updateAccountDetails, 
+    updateUserAvatar,
+    updateUserCoverImage
 }
