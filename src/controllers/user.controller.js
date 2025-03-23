@@ -276,7 +276,7 @@ const updateAccountDetails = asyncHandler(async(req,res) => {
         throw new apiError(400, "All fields are required!")
     }
     // find user first 
-    const user = User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set:{
@@ -342,6 +342,87 @@ const updateUserCoverImage = asyncHandler(async(req,res) => {
    .status(200)
    .json(new apiResponse(200, user, "CoverImage updated successfully!!"))
  })
+
+
+const getUserChannelProfile = asyncHandler(async(req,res) => {
+  // in order to go any channel's profile, we need to go to url of that channel
+  const {username} = req.params
+  if(!username?.trim()) throw new apiError(400, "username is missing!!")
+  
+  const channel = await User.aggregate([
+    // match a user
+    {
+        $match:{
+            username: username?.toLowerCase()
+        }
+    },
+
+    // lookup for counting number of subscibers for a field
+    {
+        $lookup:{
+            from:"subscriptions",   // from subscription.model.js, imported model was "Subscription" but in mongodb it will be saved as "subscriptions" so written that in "from" value
+            localField:"_id",
+            foreignField:"channel",
+            as:"susbcribers"
+        }
+    },
+
+    // lookup for finding how many channels have i subscribed
+    {
+        $lookup:{
+            from:"subscriptions",
+            localField:"_id",
+            foreignField:"subscriber",
+            as:"subscribedTo"
+
+        }
+    },
+    // add these fields
+    {
+        $addFields:{
+            subscribersCount:{
+                $size:"$subscribers"
+            },
+            channelsSubscribedToCount:{
+                $size:"$subscribedTo"
+            },
+            // to handle frontend to show that "subsribed or not" red button
+            isSubscribed:{
+                $cond:{
+                    // check ki jo document aaya h subscribers usme me hu ya nahi
+                    if:{$in: [req.user?._id, "$subscribers.subscriber"]},
+                    then:true,
+                    else:false
+                    // means "subscribers" field me "subscriber" (subscribers field has subscriber, check subscription.model.js) ke andr jaake dekh lo ki req.user._id hai ya nahi
+                }
+            }
+        }
+    },
+    {   
+        // jis jis cheez ko pass on karna use value denge 1
+        $project: {
+            fullname: 1,
+            username: 1,
+            subscribersCount:1,
+            channelsSubscribedToCount:1,
+            isSubscribed:1,
+            avatar:1,
+            coverImage:1,
+            email:1,
+
+        }
+    }
+
+])
+
+  if(!channel?.length) {
+    throw new apiError(404, "channel does not exist!")
+  }
+  return res
+  .status(200)
+  .json(new apiResponse(200,channel[0], "User channel fetched successfully!"))
+})
+
 
 export {
     registerUser,
